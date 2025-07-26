@@ -49,17 +49,20 @@ class DatabaseManager:
     async def _create_indexes(self):
         """Create necessary indexes for the alerts collection"""
         try:
-            # Index on alert_id for fast lookups
-            self.alerts_collection.create_index("alert_id", unique=True)
-            
             # Index on timestamp for time-based queries
             self.alerts_collection.create_index("timestamp")
             
             # Index on drone_id for drone-specific queries
             self.alerts_collection.create_index("drone_id")
             
-            # Index on status for status-based queries
-            self.alerts_collection.create_index("status")
+            # Index on score for confidence-based queries
+            self.alerts_collection.create_index("score")
+            
+            # Index on rl_responsed for response status queries
+            self.alerts_collection.create_index("rl_responsed")
+            
+            # Index on image_received for image status queries
+            self.alerts_collection.create_index("image_received")
             
             logger.info("Database indexes created successfully")
         except Exception as e:
@@ -78,17 +81,17 @@ class DatabaseManager:
     async def insert_alert(self, alert_data: Dict[str, Any]) -> str:
         """Insert a new alert into the database"""
         try:
-            # Generate alert_id if not provided
-            if 'alert_id' not in alert_data:
-                alert_data['alert_id'] = str(ObjectId())
+            # Generate _id if not provided
+            if '_id' not in alert_data:
+                alert_data['_id'] = str(ObjectId())
             
             # Ensure timestamp is present
             if 'timestamp' not in alert_data:
-                alert_data['timestamp'] = datetime.utcnow()
+                alert_data['timestamp'] = datetime.utcnow().isoformat()
             
             result = self.alerts_collection.insert_one(alert_data)
-            logger.info(f"Alert inserted with ID: {alert_data['alert_id']}")
-            return alert_data['alert_id']
+            logger.info(f"Alert inserted with ID: {alert_data['_id']}")
+            return alert_data['_id']
             
         except Exception as e:
             logger.error(f"Error inserting alert: {e}")
@@ -97,11 +100,11 @@ class DatabaseManager:
     async def update_alert(self, alert_id: str, update_data: Dict[str, Any]) -> bool:
         """Update an existing alert"""
         try:
-            # Remove alert_id from update data to avoid conflicts
-            update_data.pop('alert_id', None)
+            # Remove _id from update data to avoid conflicts
+            update_data.pop('_id', None)
             
             result = self.alerts_collection.update_one(
-                {"alert_id": alert_id},
+                {"_id": alert_id},
                 {"$set": update_data}
             )
             
@@ -119,7 +122,7 @@ class DatabaseManager:
     async def get_alert(self, alert_id: str) -> Optional[Dict[str, Any]]:
         """Get an alert by ID"""
         try:
-            alert = self.alerts_collection.find_one({"alert_id": alert_id})
+            alert = self.alerts_collection.find_one({"_id": alert_id})
             if alert:
                 # Convert ObjectId to string for JSON serialization
                 alert['_id'] = str(alert['_id'])
@@ -253,7 +256,7 @@ class DatabaseManager:
                     # Call the callback with the change event
                     callback(change_event)
                     
-                    logger.info(f"Change stream event processed: {operation_type} for alert {full_document.get('alert_id')}")
+                    logger.info(f"Change stream event processed: {operation_type} for alert {full_document.get('_id')}")
             
         except Exception as e:
             logger.error(f"Error handling change event: {e}")

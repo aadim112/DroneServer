@@ -1,15 +1,7 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 from enum import Enum
-
-class AlertType(str, Enum):
-    INTRUSION = "intrusion"
-    FIRE = "fire"
-    ACCIDENT = "accident"
-    SECURITY_BREACH = "security_breach"
-    ENVIRONMENTAL = "environmental"
-    OTHER = "other"
 
 class AlertStatus(str, Enum):
     PENDING = "pending"
@@ -17,34 +9,32 @@ class AlertStatus(str, Enum):
     COMPLETED = "completed"
 
 class Alert(BaseModel):
-    alert_id: str = Field(..., description="Unique alert identifier")
-    alert_type: AlertType = Field(..., description="Type of alert")
-    score: float = Field(..., ge=0.0, le=1.0, description="Confidence score (0-1)")
-    image_url: Optional[str] = Field(None, description="URL to alert image")
-    location: Dict[str, float] = Field(..., description="GPS coordinates {lat, lng}")
+    alert: str = Field(..., description="Alert description (e.g., 'Casualty - Person Detected')")
     drone_id: str = Field(..., description="ID of the drone that sent the alert")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Alert timestamp")
-    response: int = Field(default=0, description="Response status (0=no response, 1=responded)")
+    alert_location: Tuple[float, float, float] = Field(..., description="Alert location coordinates (x, y, z)")
+    image: Optional[str] = Field(None, description="Image data or reference")
     image_received: int = Field(default=0, description="Image received status (0=no image, 1=received)")
-    actions: Optional[List[str]] = Field(default=None, description="List of actions to be taken")
-    status: AlertStatus = Field(default=AlertStatus.PENDING, description="Current alert status")
-    description: Optional[str] = Field(None, description="Additional alert description")
+    rl_responsed: int = Field(default=0, description="RL response status (0=no response, 1=responded)")
+    score: float = Field(..., ge=0.0, le=1.0, description="Confidence score (0-1)")
+    timestamp: str = Field(..., description="Alert timestamp in ISO format")
 
 class AlertCreate(BaseModel):
-    alert_type: AlertType
-    score: float
-    location: Dict[str, float]
+    alert: str
     drone_id: str
-    description: Optional[str] = None
+    alert_location: Tuple[float, float, float]
+    image: Optional[str] = None
+    image_received: int = 0
+    rl_responsed: int = 0
+    score: float
+    timestamp: str
 
 class AlertResponse(BaseModel):
     alert_id: str
-    actions: List[str]
-    response: int = 1
+    rl_responsed: int = 1
 
 class AlertImageUpdate(BaseModel):
     alert_id: str
-    image_url: str
+    image: str
     image_received: int = 1
 
 class WebSocketMessage(BaseModel):
