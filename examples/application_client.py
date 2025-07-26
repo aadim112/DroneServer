@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Dict, Any, List
 
 class ApplicationClient:
-    def __init__(self, app_id: str, server_url: str = "ws://localhost:8000"):
+    def __init__(self, app_id: str, server_url: str = "web-production-a0e2.up.railway.app"):
         self.app_id = app_id
         self.server_url = f"{server_url}/ws/application/{app_id}"
         self.websocket = None
