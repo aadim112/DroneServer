@@ -1,0 +1,17 @@
+# MongoDB Configuration
+MONGODB_URI=mongodb://localhost:27017
+DATABASE_NAME=drone_alerts_db
+
+# Server Configuration
+HOST=0.0.0.0
+PORT=8000
+
+# Security
+SECRET_KEY=your-secret-key-change-this-in-production
+
+# Optional: MongoDB Authentication
+# MONGODB_USERNAME=your_username
+# MONGODB_PASSWORD=your_password
+
+# Optional: MongoDB with Authentication
+# MONGODB_URI=mongodb://username:password@localhost:27017/drone_alerts_db?authSource=admin 
