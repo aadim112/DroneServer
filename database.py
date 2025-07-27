@@ -25,7 +25,7 @@ class DatabaseManager:
             logger.info("Connecting to MongoDB...")
             
             # Add SSL parameters to connection string
-            connection_string = Config.MONGODB_URI
+            connection_string = "mongodb+srv://aamp898989:*****@cluster0.cftmhkh.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
             
             # If connection string doesn't have SSL parameters, add them
             if "ssl=true" not in connection_string and "tls=true" not in connection_string:
