@@ -1,146 +1,115 @@
 import asyncio
 import logging
-from typing import Optional, Callable, Dict, Any
-from pymongo import MongoClient
-from pymongo.database import Database
-from pymongo.collection import Collection
+import os
+from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
-from bson import ObjectId
-from bson.json_util import dumps, loads
-import json
+from typing import List, Dict, Any, Optional
 from datetime import datetime
+import json
+
 from config import Config
 
 logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self):
-        self.client: Optional[MongoClient] = None
-        self.db: Optional[Database] = None
-        self.alerts_collection: Optional[Collection] = None
-        self.change_stream = None
+        self.client: Optional[AsyncIOMotorClient] = None
+        self.db = None
+        self.alerts_collection = None
         self.is_connected = False
+        self.change_stream = None
         
     async def connect(self):
-        """Connect to MongoDB and initialize collections"""
+        """Connect to MongoDB with proper SSL configuration"""
         try:
-            self.client = MongoClient(
-                Config.MONGODB_URI,
-                serverSelectionTimeoutMS=5000,
-                connectTimeoutMS=5000
+            logger.info("Connecting to MongoDB...")
+            
+            # Add SSL parameters to connection string
+            connection_string = Config.MONGODB_URI
+            
+            # If connection string doesn't have SSL parameters, add them
+            if "ssl=true" not in connection_string and "tls=true" not in connection_string:
+                if "?" in connection_string:
+                    connection_string += "&ssl=true&ssl_cert_reqs=CERT_NONE"
+                else:
+                    connection_string += "?ssl=true&ssl_cert_reqs=CERT_NONE"
+            
+            # Create client with proper SSL configuration
+            self.client = AsyncIOMotorClient(
+                connection_string,
+                serverSelectionTimeoutMS=10000,
+                connectTimeoutMS=10000,
+                socketTimeoutMS=10000,
+                maxPoolSize=10,
+                retryWrites=True,
+                w="majority"
             )
             
             # Test connection
-            self.client.admin.command('ping')
+            await self.client.admin.command('ping')
             
+            # Set up database and collection
             self.db = self.client[Config.DATABASE_NAME]
             self.alerts_collection = self.db[Config.ALERTS_COLLECTION]
-            
-            # Create indexes for better performance
-            await self._create_indexes()
             
             self.is_connected = True
             logger.info("Successfully connected to MongoDB")
             
-        except (ConnectionFailure, ServerSelectionTimeoutError) as e:
-            logger.error(f"Failed to connect to MongoDB: {e}")
-            raise
-    
-    async def _create_indexes(self):
-        """Create necessary indexes for the alerts collection"""
-        try:
-            # Index on timestamp for time-based queries
-            self.alerts_collection.create_index("timestamp")
-            
-            # Index on drone_id for drone-specific queries
-            self.alerts_collection.create_index("drone_id")
-            
-            # Index on score for confidence-based queries
-            self.alerts_collection.create_index("score")
-            
-            # Index on rl_responsed for response status queries
-            self.alerts_collection.create_index("rl_responsed")
-            
-            # Index on image_received for image status queries
-            self.alerts_collection.create_index("image_received")
-            
-            logger.info("Database indexes created successfully")
         except Exception as e:
-            logger.error(f"Error creating indexes: {e}")
+            logger.error(f"Failed to connect to MongoDB: {e}")
+            self.is_connected = False
+            raise
     
     async def disconnect(self):
         """Disconnect from MongoDB"""
-        if self.change_stream:
-            self.change_stream.close()
-        
-        if self.client:
-            self.client.close()
+        try:
+            if self.change_stream:
+                await self.change_stream.close()
+            
+            if self.client:
+                self.client.close()
+                
             self.is_connected = False
             logger.info("Disconnected from MongoDB")
-    
-    async def insert_alert(self, alert_data: Dict[str, Any]) -> str:
-        """Insert a new alert into the database"""
-        try:
-            # Generate _id if not provided
-            if '_id' not in alert_data:
-                alert_data['_id'] = str(ObjectId())
             
-            # Ensure timestamp is present
+        except Exception as e:
+            logger.error(f"Error disconnecting from MongoDB: {e}")
+    
+    async def create_alert(self, alert_data: Dict[str, Any]) -> str:
+        """Create a new alert"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            # Add timestamp if not present
             if 'timestamp' not in alert_data:
                 alert_data['timestamp'] = datetime.utcnow().isoformat()
             
-            result = self.alerts_collection.insert_one(alert_data)
-            logger.info(f"Alert inserted with ID: {alert_data['_id']}")
-            return alert_data['_id']
+            # Add created_at field
+            alert_data['created_at'] = datetime.utcnow()
+            
+            result = await self.alerts_collection.insert_one(alert_data)
+            logger.info(f"Created alert with ID: {result.inserted_id}")
+            return str(result.inserted_id)
             
         except Exception as e:
-            logger.error(f"Error inserting alert: {e}")
+            logger.error(f"Error creating alert: {e}")
             raise
     
-    async def update_alert(self, alert_id: str, update_data: Dict[str, Any]) -> bool:
-        """Update an existing alert"""
+    async def get_all_alerts(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get all alerts"""
         try:
-            # Remove _id from update data to avoid conflicts
-            update_data.pop('_id', None)
+            if not self.is_connected:
+                raise Exception("Database not connected")
             
-            result = self.alerts_collection.update_one(
-                {"_id": alert_id},
-                {"$set": update_data}
-            )
+            cursor = self.alerts_collection.find().sort('created_at', -1).limit(limit)
+            alerts = await cursor.to_list(length=limit)
             
-            if result.modified_count > 0:
-                logger.info(f"Alert {alert_id} updated successfully")
-                return True
-            else:
-                logger.warning(f"Alert {alert_id} not found for update")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error updating alert {alert_id}: {e}")
-            raise
-    
-    async def get_alert(self, alert_id: str) -> Optional[Dict[str, Any]]:
-        """Get an alert by ID"""
-        try:
-            alert = self.alerts_collection.find_one({"_id": alert_id})
-            if alert:
-                # Convert ObjectId to string for JSON serialization
-                alert['_id'] = str(alert['_id'])
-                return alert
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error getting alert {alert_id}: {e}")
-            raise
-    
-    async def get_all_alerts(self, limit: int = 100) -> list:
-        """Get all alerts with optional limit"""
-        try:
-            alerts = list(self.alerts_collection.find().sort("timestamp", -1).limit(limit))
-            
-            # Convert ObjectIds to strings
+            # Convert ObjectId to string for JSON serialization
             for alert in alerts:
-                alert['_id'] = str(alert['_id'])
+                if '_id' in alert:
+                    alert['id'] = str(alert['_id'])
+                    del alert['_id']
             
             return alerts
             
@@ -148,126 +117,128 @@ class DatabaseManager:
             logger.error(f"Error getting alerts: {e}")
             raise
     
-    async def start_change_stream(self, callback: Callable[[Dict[str, Any]], None]):
-        """Start MongoDB Change Stream to watch for alert changes"""
+    async def get_alert(self, alert_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific alert by ID"""
         try:
-            # Check if we're running on a replica set
-            try:
-                # Create change stream cursor to watch for inserts and updates
-                self.change_stream = self.alerts_collection.watch(
-                    [
-                        {'$match': {
-                            '$or': [
-                                {'operationType': 'insert'},
-                                {'operationType': 'update'},
-                                {'operationType': 'replace'}
-                            ]
-                        }}
-                    ],
-                    full_document='updateLookup'
-                )
-                
-                logger.info("Change stream started successfully")
-                
-                # Process change stream events
-                async def process_changes():
-                    try:
-                        for change in self.change_stream:
-                            await self._handle_change_event(change, callback)
-                    except Exception as e:
-                        logger.error(f"Error in change stream: {e}")
-                        # Attempt to restart change stream
-                        await asyncio.sleep(5)
-                        await self.start_change_stream(callback)
-                
-                # Start processing in background
-                asyncio.create_task(process_changes())
-                
-            except Exception as e:
-                if "replica sets" in str(e).lower():
-                    logger.warning("Change streams require replica sets. Running in polling mode instead.")
-                    # Fall back to polling mode
-                    await self._start_polling_mode(callback)
-                else:
-                    raise
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            from bson import ObjectId
+            alert = await self.alerts_collection.find_one({'_id': ObjectId(alert_id)})
+            
+            if alert:
+                alert['id'] = str(alert['_id'])
+                del alert['_id']
+            
+            return alert
+            
+        except Exception as e:
+            logger.error(f"Error getting alert {alert_id}: {e}")
+            raise
+    
+    async def update_alert_response(self, alert_id: str, response_data: Dict[str, Any]) -> bool:
+        """Update alert response"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            from bson import ObjectId
+            result = await self.alerts_collection.update_one(
+                {'_id': ObjectId(alert_id)},
+                {'$set': response_data}
+            )
+            
+            return result.modified_count > 0
+            
+        except Exception as e:
+            logger.error(f"Error updating alert response: {e}")
+            raise
+    
+    async def update_alert_image(self, alert_id: str, image_data: Dict[str, Any]) -> bool:
+        """Update alert image"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            from bson import ObjectId
+            result = await self.alerts_collection.update_one(
+                {'_id': ObjectId(alert_id)},
+                {'$set': image_data}
+            )
+            
+            return result.modified_count > 0
+            
+        except Exception as e:
+            logger.error(f"Error updating alert image: {e}")
+            raise
+    
+    async def get_system_stats(self) -> Dict[str, Any]:
+        """Get system statistics"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            total_alerts = await self.alerts_collection.count_documents({})
+            
+            # Count alerts by status
+            pending_alerts = await self.alerts_collection.count_documents({'rl_responsed': 0})
+            responded_alerts = await self.alerts_collection.count_documents({'rl_responsed': 1})
+            
+            # Count unique drones
+            unique_drones = await self.alerts_collection.distinct('drone_id')
+            
+            return {
+                'total_alerts': total_alerts,
+                'pending_alerts': pending_alerts,
+                'responded_alerts': responded_alerts,
+                'active_drones': len(unique_drones),
+                'system_status': 'operational' if self.is_connected else 'disconnected',
+                'database_status': 'connected' if self.is_connected else 'disconnected',
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting system stats: {e}")
+            return {
+                'total_alerts': 0,
+                'pending_alerts': 0,
+                'responded_alerts': 0,
+                'active_drones': 0,
+                'system_status': 'error',
+                'database_status': 'error',
+                'error': str(e),
+                'timestamp': datetime.utcnow().isoformat()
+            }
+    
+    async def start_change_stream(self, callback):
+        """Start MongoDB change stream to watch for alert updates"""
+        try:
+            if not self.is_connected:
+                logger.warning("Cannot start change stream: database not connected")
+                return
+            
+            logger.info("Starting MongoDB change stream...")
+            
+            # Create change stream pipeline
+            pipeline = [
+                {
+                    '$match': {
+                        'operationType': {'$in': ['insert', 'update', 'replace']}
+                    }
+                }
+            ]
+            
+            self.change_stream = self.alerts_collection.watch(pipeline)
+            
+            # Start listening for changes
+            async for change in self.change_stream:
+                try:
+                    await callback(change)
+                except Exception as e:
+                    logger.error(f"Error in change stream callback: {e}")
                     
         except Exception as e:
             logger.error(f"Error starting change stream: {e}")
-            raise
-    
-    async def _start_polling_mode(self, callback: Callable[[Dict[str, Any]], None]):
-        """Fallback polling mode when change streams are not available"""
-        logger.info("Starting polling mode for alert updates")
-        
-        async def poll_for_changes():
-            last_check = datetime.utcnow()
-            
-            while True:
-                try:
-                    # Check for new or updated alerts since last check
-                    recent_alerts = self.alerts_collection.find({
-                        "timestamp": {"$gte": last_check}
-                    }).sort("timestamp", -1)
-                    
-                    for alert in recent_alerts:
-                        # Convert ObjectId to string
-                        alert['_id'] = str(alert['_id'])
-                        
-                        # Create change event
-                        change_event = {
-                            'operation_type': 'update',
-                            'alert': alert,
-                            'timestamp': datetime.utcnow().isoformat()
-                        }
-                        
-                        # Call the callback
-                        callback(change_event)
-                    
-                    last_check = datetime.utcnow()
-                    await asyncio.sleep(2)  # Poll every 2 seconds
-                    
-                except Exception as e:
-                    logger.error(f"Error in polling mode: {e}")
-                    await asyncio.sleep(5)
-        
-        # Start polling in background
-        asyncio.create_task(poll_for_changes())
-    
-    async def _handle_change_event(self, change: Dict[str, Any], callback: Callable[[Dict[str, Any]], None]):
-        """Handle individual change stream events"""
-        try:
-            operation_type = change.get('operationType')
-            
-            if operation_type in ['insert', 'update', 'replace']:
-                # Get the full document
-                full_document = change.get('fullDocument')
-                
-                if full_document:
-                    # Convert ObjectId to string for JSON serialization
-                    full_document['_id'] = str(full_document['_id'])
-                    
-                    # Create change event data
-                    change_event = {
-                        'operation_type': operation_type,
-                        'alert': full_document,
-                        'timestamp': datetime.utcnow().isoformat()
-                    }
-                    
-                    # Call the callback with the change event
-                    callback(change_event)
-                    
-                    logger.info(f"Change stream event processed: {operation_type} for alert {full_document.get('_id')}")
-            
-        except Exception as e:
-            logger.error(f"Error handling change event: {e}")
-    
-    def serialize_alert(self, alert: Dict[str, Any]) -> str:
-        """Serialize alert document to JSON string"""
-        try:
-            return dumps(alert)
-        except Exception as e:
-            logger.error(f"Error serializing alert: {e}")
-            raise
 
-# Global database manager instance
+# Create global database manager instance
 db_manager = DatabaseManager() 

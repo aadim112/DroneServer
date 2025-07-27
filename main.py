@@ -27,7 +27,11 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Drone Alert Management System...")
     
     # Connect to database
-    await db_manager.connect()
+    try:
+        await db_manager.connect()
+    except Exception as e:
+        logger.error(f"Database connection failed: {e}")
+        # Continue without database for now
     
     # Start change stream to watch for alert updates
     async def change_stream_callback(change_event: Dict[str, Any]):
