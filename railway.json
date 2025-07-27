@@ -9,5 +9,15 @@
     "healthcheckTimeout": 60,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5
+  },
+  "environments": {
+    "production": {
+      "variables": {
+        "MONGODB_URI": "mongodb+srv://aamp898989:dronesurvillance@cluster0.cftmhkh.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+        "DATABASE_NAME": "drone_alerts_db",
+        "ENVIRONMENT": "production",
+        "DEBUG": "false"
+      }
+    }
   }
 } 
