@@ -6,7 +6,7 @@ Simple Server Test - Test the drone alert server
 import requests
 import json
 
-def test_server(base_url="http://droneserver-production.up.railway.app"):
+def test_server(base_url="https://drone-server-tau.vercel.app/"):
     """Test server endpoints"""
     print(f"🚁 Testing Server: {base_url}")
     print("=" * 50)
@@ -48,11 +48,14 @@ def test_server(base_url="http://droneserver-production.up.railway.app"):
     print(f"\n📡 Testing POST /api/alerts...")
     try:
         test_alert = {
-            "alert_type": "test",
-            "score": 0.85,
-            "location": {"lat": 40.7128, "lng": -74.0060},
+            "alert": "Test Alert - Intrusion Detected",
             "drone_id": "test_drone",
-            "description": "Test alert"
+            "alert_location": [40.7128, -74.0060, 100.0],
+            "image": None,
+            "image_received": 0,
+            "rl_responsed": 0,
+            "score": 0.85,
+            "timestamp": "2025-07-27T13:15:00Z"
         }
         
         response = requests.post(
@@ -81,6 +84,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         url = sys.argv[1]
     else:
-        url = "https://droneserver-production.up.railway.app"
+        url = "https://drone-server-tau.vercel.app/"
     
     test_server(url) 
