@@ -299,6 +299,24 @@ async def get_system_stats():
         logger.error(f"Error getting system stats: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@app.get("/debug/env")
+async def debug_environment():
+    """Debug endpoint to show environment variables (for troubleshooting)"""
+    import os
+    return {
+        "MONGODB_URI_set": bool(os.getenv('MONGODB_URI')),
+        "DATABASE_NAME_set": bool(os.getenv('DATABASE_NAME')),
+        "HOST_set": bool(os.getenv('HOST')),
+        "PORT_set": bool(os.getenv('PORT')),
+        "ENVIRONMENT_set": bool(os.getenv('ENVIRONMENT')),
+        "DEBUG_set": bool(os.getenv('DEBUG')),
+        "database_connected": db_manager.is_connected,
+        "mongodb_uri_length": len(os.getenv('MONGODB_URI', '')) if os.getenv('MONGODB_URI') else 0,
+        "database_name": os.getenv('DATABASE_NAME', 'NOT_SET'),
+        "host": os.getenv('HOST', 'NOT_SET'),
+        "port": os.getenv('PORT', 'NOT_SET')
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
