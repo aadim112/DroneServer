@@ -14,8 +14,8 @@ class Config:
     PORT = int(os.getenv("PORT", 8000))
     
     # Production settings
-    DEBUG = os.getenv("DEBUG", "false").lower() == "true"
-    ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
+    DEBUG = os.getenv("DEBUG", "true").lower() == "true"
+    ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
     
     # WebSocket Configuration
     WS_PING_INTERVAL = 20

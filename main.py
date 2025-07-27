@@ -30,11 +30,18 @@ async def lifespan(app: FastAPI):
     # Connect to database
     try:
         await db_manager.connect()
+        
+        # Fix database schema if needed
+        try:
+            await db_manager.fix_database_schema()
+        except Exception as e:
+            logger.warning(f"Database schema fix failed (non-critical): {e}")
+            
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
         # Continue without database for now
     
-    # Start change stream to watch for alert updates
+    # Start change stream to watch for alert updates (non-blocking)
     async def change_stream_callback(change_event: Dict[str, Any]):
         """Callback function for database change stream events"""
         try:
@@ -47,7 +54,11 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Error in change stream callback: {e}")
     
-    await db_manager.start_change_stream(change_stream_callback)
+    # Start change stream in background task
+    if db_manager.is_connected:
+        import asyncio
+        asyncio.create_task(db_manager.start_change_stream(change_stream_callback))
+        logger.info("Change stream started in background")
     
     logger.info("System started successfully")
     
@@ -250,8 +261,7 @@ async def update_alert_response(alert_id: str, response: AlertResponse):
     """Update alert response via REST API"""
     try:
         update_data = {
-            'response': response.response,
-            'actions': response.actions,
+            'rl_responsed': response.rl_responsed,
             'status': 'responded'
         }
         
@@ -272,7 +282,7 @@ async def update_alert_image(alert_id: str, image_update: AlertImageUpdate):
     try:
         update_data = {
             'image_received': image_update.image_received,
-            'image_url': image_update.image_url,
+            'image': image_update.image,
             'status': 'completed'
         }
         
