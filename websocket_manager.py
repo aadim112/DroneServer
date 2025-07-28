@@ -163,22 +163,28 @@ class WebSocketManager:
             # Store drone-alert mapping
             self.drone_alerts[drone_id] = alert_id
             
-            # Get the complete alert data from database to ensure proper serialization
-            complete_alert = await db_manager.get_alert(str(alert_id))
+            # Create a properly serialized alert for broadcasting
+            # Use the original alert data but ensure it's properly serialized
+            broadcast_alert = serialize_datetime(alert_data.copy())
+            
+            # Add the alert_id to the broadcast data
+            broadcast_alert['id'] = str(alert_id)
             
             # Broadcast to all applications
             broadcast_message = {
                 "type": "new_alert",
-                "alert": complete_alert if complete_alert else serialize_datetime(alert_data),
+                "alert": broadcast_alert,
                 "alert_id": str(alert_id),  # Convert ObjectId to string
                 "timestamp": datetime.utcnow().isoformat()
             }
             await self.broadcast_to_applications(broadcast_message)
             
             logger.info(f"Alert {alert_id} from drone {drone_id} processed and broadcasted")
+            logger.info(f"Broadcast message: {json.dumps(broadcast_message, indent=2)}")
             
         except Exception as e:
             logger.error(f"Error handling alert from drone {drone_id}: {e}")
+            logger.error(f"Alert data: {alert_data}")
     
     async def handle_response_from_application(self, alert_id: str, response_data: Dict[str, Any]):
         """Handle response from application (RL model output)"""
@@ -254,8 +260,12 @@ class WebSocketManager:
             message_type = message_data.get('type')
             client_type = self.connection_info.get(client_id, {}).client_type
             
+            logger.info(f"Handling message from {client_id} (type: {client_type}): {message_type}")
+            logger.info(f"Message data: {json.dumps(message_data, indent=2)}")
+            
             if message_type == 'alert':
                 if client_type == 'drone':
+                    logger.info(f"Processing alert from drone {client_id}")
                     await self.handle_alert_from_drone(client_id, message_data.get('data', {}))
                 else:
                     logger.warning(f"Applications cannot send alerts")
@@ -287,6 +297,7 @@ class WebSocketManager:
                 
         except Exception as e:
             logger.error(f"Error handling WebSocket message from {client_id}: {e}")
+            logger.error(f"Message data: {message_data}")
     
     def get_connection_stats(self) -> Dict[str, Any]:
         """Get current connection statistics"""

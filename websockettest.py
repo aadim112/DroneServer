@@ -1,5 +1,6 @@
 import asyncio
 import websockets
+from datetime import datetime
 import json
 
 async def send_alert():
@@ -8,15 +9,15 @@ async def send_alert():
         alert = {
             "type": "alert",
             "data": {
-                "alert": "Hela 2 Detected",
+                "alert": "abc!",
                 "alert_location": [0.0, 0.0, 0.0],
-                "timestamp": "2025-07-28T12:16:07.965060",
-                "alert_type": "flood",
+                "timestamp": datetime.now().isoformat(),
+                "alert_type": "Crowd",
                 "score": 98.5,
                 "drone_id": "drone_001"
             }
         }
         await websocket.send(json.dumps(alert))
-        print("Alert sent!")
+        print("Alert sent!", alert)
 
 asyncio.run(send_alert())
