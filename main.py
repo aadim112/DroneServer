@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import json
 from typing import List, Dict, Any
+from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
 
 from config import Config
@@ -45,11 +46,36 @@ async def lifespan(app: FastAPI):
     async def change_stream_callback(change_event: Dict[str, Any]):
         """Callback function for database change stream events"""
         try:
-            # Broadcast the change to all connected applications
+            # Serialize the change event to make it JSON compatible
+            serialized_change = {}
+            
+            # Handle the change event structure
+            if 'operationType' in change_event:
+                serialized_change['operationType'] = change_event['operationType']
+            
+            if 'documentKey' in change_event:
+                # Convert ObjectId to string
+                if '_id' in change_event['documentKey']:
+                    serialized_change['documentKey'] = {
+                        '_id': str(change_event['documentKey']['_id'])
+                    }
+            
+            if 'fullDocument' in change_event:
+                # Serialize the full document
+                from websocket_manager import serialize_datetime
+                serialized_change['fullDocument'] = serialize_datetime(change_event['fullDocument'])
+            
+            if 'updateDescription' in change_event:
+                serialized_change['updateDescription'] = change_event['updateDescription']
+            
+            # Add timestamp
+            serialized_change['timestamp'] = datetime.utcnow().isoformat()
+            
+            # Broadcast the serialized change to all connected applications
             await websocket_manager.broadcast_to_applications({
                 "type": "alert_update",
-                "change": change_event,
-                "timestamp": change_event.get('timestamp')
+                "change": serialized_change,
+                "timestamp": serialized_change['timestamp']
             })
         except Exception as e:
             logger.error(f"Error in change stream callback: {e}")
@@ -183,10 +209,14 @@ async def websocket_application_endpoint(websocket: WebSocket, app_id: str):
         try:
             alerts = await db_manager.get_all_alerts(limit=50)
             if alerts:
+                # Ensure alerts are properly serialized
+                from websocket_manager import serialize_datetime
+                serialized_alerts = serialize_datetime(alerts)
+                
                 initial_data_message = {
                     "type": "initial_alerts",
-                    "alerts": alerts,
-                    "timestamp": asyncio.get_event_loop().time()
+                    "alerts": serialized_alerts,
+                    "timestamp": datetime.utcnow().isoformat()
                 }
                 await websocket_manager.send_personal_message(client_id, initial_data_message)
         except Exception as e:

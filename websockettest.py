@@ -8,7 +8,7 @@ async def send_alert():
         alert = {
             "type": "alert",
             "data": {
-                "alert": "Flood Detected",
+                "alert": "Hela 2 Detected",
                 "alert_location": [0.0, 0.0, 0.0],
                 "timestamp": "2025-07-28T12:16:07.965060",
                 "alert_type": "flood",

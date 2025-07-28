@@ -9,7 +9,7 @@ from models import WebSocketMessage, ConnectionInfo, DroneCommand
 from database import db_manager
 
 def serialize_datetime(obj):
-    """Recursively serialize datetime and ObjectId objects in dictionaries"""
+    """Recursively serialize datetime, ObjectId, and other MongoDB objects in dictionaries"""
     if isinstance(obj, dict):
         return {key: serialize_datetime(value) for key, value in obj.items()}
     elif isinstance(obj, list):
@@ -17,6 +17,12 @@ def serialize_datetime(obj):
     elif isinstance(obj, datetime):
         return obj.isoformat()
     elif hasattr(obj, '__class__') and obj.__class__.__name__ == 'ObjectId':
+        return str(obj)
+    elif hasattr(obj, '__class__') and obj.__class__.__name__ == 'Timestamp':
+        # Handle MongoDB Timestamp objects
+        return str(obj)
+    elif hasattr(obj, '__class__') and obj.__class__.__name__ == 'BSON':
+        # Handle other BSON types
         return str(obj)
     else:
         return obj
@@ -157,10 +163,13 @@ class WebSocketManager:
             # Store drone-alert mapping
             self.drone_alerts[drone_id] = alert_id
             
+            # Get the complete alert data from database to ensure proper serialization
+            complete_alert = await db_manager.get_alert(str(alert_id))
+            
             # Broadcast to all applications
             broadcast_message = {
                 "type": "new_alert",
-                "alert": alert_data,
+                "alert": complete_alert if complete_alert else serialize_datetime(alert_data),
                 "alert_id": str(alert_id),  # Convert ObjectId to string
                 "timestamp": datetime.utcnow().isoformat()
             }
