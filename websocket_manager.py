@@ -9,13 +9,15 @@ from models import WebSocketMessage, ConnectionInfo, DroneCommand
 from database import db_manager
 
 def serialize_datetime(obj):
-    """Recursively serialize datetime objects in dictionaries"""
+    """Recursively serialize datetime and ObjectId objects in dictionaries"""
     if isinstance(obj, dict):
         return {key: serialize_datetime(value) for key, value in obj.items()}
     elif isinstance(obj, list):
         return [serialize_datetime(item) for item in obj]
     elif isinstance(obj, datetime):
         return obj.isoformat()
+    elif hasattr(obj, '__class__') and obj.__class__.__name__ == 'ObjectId':
+        return str(obj)
     else:
         return obj
 
@@ -159,6 +161,7 @@ class WebSocketManager:
             broadcast_message = {
                 "type": "new_alert",
                 "alert": alert_data,
+                "alert_id": str(alert_id),  # Convert ObjectId to string
                 "timestamp": datetime.utcnow().isoformat()
             }
             await self.broadcast_to_applications(broadcast_message)

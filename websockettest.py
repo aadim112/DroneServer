@@ -3,7 +3,7 @@ import websockets
 import json
 
 async def send_alert():
-    uri = "ws://localhost:8000/ws/drone/drone_001"
+    uri = "wss://web-production-190fc.up.railway.app/ws/drone/drone_001"
     async with websockets.connect(uri) as websocket:
         alert = {
             "type": "alert",
