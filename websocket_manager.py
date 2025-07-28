@@ -8,6 +8,17 @@ import uuid
 from models import WebSocketMessage, ConnectionInfo, DroneCommand
 from database import db_manager
 
+def serialize_datetime(obj):
+    """Recursively serialize datetime objects in dictionaries"""
+    if isinstance(obj, dict):
+        return {key: serialize_datetime(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_datetime(item) for item in obj]
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    else:
+        return obj
+
 logger = logging.getLogger(__name__)
 
 class WebSocketManager:
@@ -91,7 +102,9 @@ class WebSocketManager:
                 websocket = self.application_connections[client_id]
             
             if websocket:
-                await websocket.send_text(json.dumps(message))
+                # Serialize datetime objects before sending
+                serialized_message = serialize_datetime(message)
+                await websocket.send_text(json.dumps(serialized_message))
             else:
                 logger.warning(f"Client {client_id} not found for personal message")
                 
@@ -108,7 +121,9 @@ class WebSocketManager:
         
         for client_id, websocket in self.application_connections.items():
             try:
-                await websocket.send_text(json.dumps(message))
+                # Serialize datetime objects before sending
+                serialized_message = serialize_datetime(message)
+                await websocket.send_text(json.dumps(serialized_message))
             except Exception as e:
                 logger.error(f"Error broadcasting to application {client_id}: {e}")
                 disconnected_clients.append(client_id)

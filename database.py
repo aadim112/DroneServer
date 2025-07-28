@@ -159,11 +159,17 @@ class DatabaseManager:
             cursor = self.alerts_collection.find().sort('created_at', -1).limit(limit)
             alerts = await cursor.to_list(length=limit)
             
-            # Convert ObjectId to string for JSON serialization
+            # Convert ObjectId to string and datetime to ISO format for JSON serialization
             for alert in alerts:
                 if '_id' in alert:
                     alert['id'] = str(alert['_id'])
                     del alert['_id']
+                
+                # Convert datetime fields to ISO format strings
+                if 'created_at' in alert and isinstance(alert['created_at'], datetime):
+                    alert['created_at'] = alert['created_at'].isoformat()
+                if 'updated_at' in alert and isinstance(alert['updated_at'], datetime):
+                    alert['updated_at'] = alert['updated_at'].isoformat()
             
             return alerts
             
@@ -183,6 +189,12 @@ class DatabaseManager:
             if alert:
                 alert['id'] = str(alert['_id'])
                 del alert['_id']
+                
+                # Convert datetime fields to ISO format strings
+                if 'created_at' in alert and isinstance(alert['created_at'], datetime):
+                    alert['created_at'] = alert['created_at'].isoformat()
+                if 'updated_at' in alert and isinstance(alert['updated_at'], datetime):
+                    alert['updated_at'] = alert['updated_at'].isoformat()
             
             return alert
             
