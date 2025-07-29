@@ -9,7 +9,7 @@ import json
 import base64
 import websockets
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 # Configuration
@@ -93,7 +93,7 @@ class WebSocketAlertImageSender:
                 "actual_image": actual_image_blob,
                 "matched_frame": matched_frame_blob,
                 "location": location,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
             # Create WebSocket message
@@ -156,7 +156,7 @@ class WebSocketAlertImageSender:
                 "actual_image": actual_image_blob,
                 "matched_frame": matched_frame_blob,
                 "location": location,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
             # Create WebSocket message
