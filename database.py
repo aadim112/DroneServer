@@ -91,17 +91,31 @@ class DatabaseManager:
     async def disconnect(self):
         """Disconnect from MongoDB"""
         try:
+            # Close change stream gracefully
             if self.change_stream:
-                await self.change_stream.close()
+                try:
+                    await self.change_stream.close()
+                    logger.info("Change stream closed successfully")
+                except Exception as e:
+                    if "operation was interrupted" in str(e) or "CursorKilled" in str(e):
+                        logger.info("Change stream already closed during shutdown - this is normal")
+                    else:
+                        logger.error(f"Error closing change stream: {e}")
             
+            # Close MongoDB client
             if self.client:
-                self.client.close()
+                try:
+                    self.client.close()
+                    logger.info("MongoDB client closed successfully")
+                except Exception as e:
+                    logger.error(f"Error closing MongoDB client: {e}")
                 
             self.is_connected = False
-            logger.info("Disconnected from MongoDB")
+            logger.info("Database disconnected successfully")
             
         except Exception as e:
-            logger.error(f"Error disconnecting from MongoDB: {e}")
+            logger.error(f"Error during database disconnect: {e}")
+            self.is_connected = False
     
     async def create_alert(self, alert_data: Dict[str, Any]) -> str:
         """Create a new alert"""
@@ -314,7 +328,11 @@ class DatabaseManager:
                     logger.error(f"Error in change stream callback: {e}")
                     
         except Exception as e:
-            logger.error(f"Error starting change stream: {e}")
+            # Check if it's a shutdown-related error
+            if "operation was interrupted" in str(e) or "CursorKilled" in str(e):
+                logger.info("Change stream interrupted during shutdown - this is normal")
+            else:
+                logger.error(f"Error starting change stream: {e}")
             # Don't re-raise the exception to avoid blocking startup
 
     async def fix_database_schema(self):
