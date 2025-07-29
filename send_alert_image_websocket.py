@@ -19,7 +19,7 @@ SERVER_URL = "https://web-production-190fc.up.railway.app"
 class WebSocketAlertImageSender:
     """Send alert images via WebSocket to server, which forwards to drones"""
     
-    def __init__(self, app_id: str = "MyApp001"):
+    def __init__(self, app_id: str = "app_001"):
         self.app_id = app_id
         self.ws_url = WS_URL
         self.websocket = None
@@ -28,6 +28,7 @@ class WebSocketAlertImageSender:
         """Connect to the WebSocket server"""
         try:
             uri = f"{self.ws_url}/ws/application/{self.app_id}"
+            print(f"🔌 Connecting to WebSocket: {uri}")
             self.websocket = await websockets.connect(uri)
             
             # Wait for connection message
@@ -38,6 +39,7 @@ class WebSocketAlertImageSender:
             
         except Exception as e:
             print(f"❌ Failed to connect: {e}")
+            print(f"   WebSocket URL: {uri}")
             return False
     
     async def disconnect(self):
@@ -101,7 +103,9 @@ class WebSocketAlertImageSender:
             }
             
             # Send message via WebSocket
-            await self.websocket.send(json.dumps(message))
+            message_json = json.dumps(message)
+            print(f"📤 Sending WebSocket message: {message_json[:200]}...")
+            await self.websocket.send(message_json)
             print(f"✅ Alert image sent via WebSocket to server")
             print(f"   - Name: {name}")
             print(f"   - Drone: {drone_id}")
@@ -162,7 +166,9 @@ class WebSocketAlertImageSender:
             }
             
             # Send message via WebSocket
-            await self.websocket.send(json.dumps(message))
+            message_json = json.dumps(message)
+            print(f"📤 Sending WebSocket message: {message_json[:200]}...")
+            await self.websocket.send(message_json)
             print(f"✅ Alert image sent via WebSocket to server")
             print(f"   - Name: {name}")
             print(f"   - Drone: {drone_id}")

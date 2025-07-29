@@ -276,6 +276,41 @@ class WebSocketManager:
             logger.error(f"Error handling alert image from drone {drone_id}: {e}")
             logger.error(f"Alert image data: {alert_image_data}")
 
+    async def handle_alert_image_from_application(self, app_id: str, alert_image_data: Dict[str, Any]):
+        """Handle alert image data from application"""
+        try:
+            # Create alert image in database
+            alert_image_id = await db_manager.create_alert_image(alert_image_data)
+            
+            # Broadcast to other applications
+            broadcast_message = {
+                "type": "alert_image_received",
+                "alert_image_id": alert_image_id,
+                "alert_image": serialize_datetime(alert_image_data),
+                "app_id": app_id,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            await self.broadcast_to_applications(broadcast_message)
+            
+            # Forward to drones if specified
+            drone_id = alert_image_data.get('drone_id')
+            if drone_id and drone_id != "No Drone":
+                drone_message = {
+                    "type": "alert_image",
+                    "alert_image_id": alert_image_id,
+                    "alert_image": serialize_datetime(alert_image_data),
+                    "app_id": app_id,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+                await self.send_to_drone(drone_id, drone_message)
+                logger.info(f"Alert image {alert_image_id} forwarded to drone {drone_id}")
+            
+            logger.info(f"Alert image {alert_image_id} from application {app_id} processed and broadcasted")
+            
+        except Exception as e:
+            logger.error(f"Error handling alert image from application {app_id}: {e}")
+            logger.error(f"Alert image data: {alert_image_data}")
+
     async def handle_processing_task_from_application(self, app_id: str, task_data: Dict[str, Any]):
         """Handle processing task from application"""
         try:
@@ -396,8 +431,10 @@ class WebSocketManager:
             elif message_type == 'alert_image':
                 if client_type == 'drone':
                     await self.handle_alert_image_from_drone(client_id, message_data.get('data', {}))
+                elif client_type == 'application':
+                    await self.handle_alert_image_from_application(client_id, message_data.get('data', {}))
                 else:
-                    logger.warning(f"Applications cannot send alert images")
+                    logger.warning(f"Invalid client type for alert_image message")
             
             elif message_type == 'processing_task':
                 if client_type == 'application':
