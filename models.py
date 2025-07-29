@@ -55,6 +55,34 @@ class AlertImageCreate(BaseModel):
     location: List[float] = [0, 0, 0]
     timestamp: str
 
+# New models for data processing flow
+class ProcessingTask(BaseModel):
+    task_id: str = Field(..., description="Unique task identifier")
+    app_id: str = Field(..., description="ID of the application that created the task")
+    drone_id: str = Field(..., description="ID of the drone to process the task")
+    task_type: str = Field(..., description="Type of processing task (e.g., 'image_analysis', 'object_detection')")
+    input_data: Dict[str, Any] = Field(..., description="Input data for processing")
+    status: str = Field(default="pending", description="Task status: pending, processing, completed, failed")
+    priority: int = Field(default=1, description="Task priority (1=low, 5=high)")
+    created_at: str = Field(..., description="Task creation timestamp")
+    updated_at: Optional[str] = Field(None, description="Task last update timestamp")
+
+class ProcessingTaskCreate(BaseModel):
+    app_id: str
+    drone_id: str
+    task_type: str
+    input_data: Dict[str, Any]
+    priority: int = 1
+
+class ProcessingResult(BaseModel):
+    task_id: str = Field(..., description="Task identifier")
+    drone_id: str = Field(..., description="ID of the drone that processed the task")
+    result_data: Dict[str, Any] = Field(..., description="Processed result data")
+    processing_time: float = Field(..., description="Processing time in seconds")
+    success: bool = Field(..., description="Whether processing was successful")
+    error_message: Optional[str] = Field(None, description="Error message if processing failed")
+    timestamp: str = Field(..., description="Result timestamp")
+
 class WebSocketMessage(BaseModel):
     type: str
     data: Dict[str, Any]

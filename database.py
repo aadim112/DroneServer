@@ -17,6 +17,8 @@ class DatabaseManager:
         self.db = None
         self.alerts_collection = None
         self.alert_images_collection = None
+        self.processing_tasks_collection = None
+        self.processing_results_collection = None
         self.is_connected = False
         self.change_stream = None
         
@@ -58,11 +60,15 @@ class DatabaseManager:
             self.db = self.client[Config.DATABASE_NAME]
             self.alerts_collection = self.db[Config.ALERTS_COLLECTION]
             self.alert_images_collection = self.db[Config.ALERT_IMAGES_COLLECTION]
+            self.processing_tasks_collection = self.db[Config.PROCESSING_TASKS_COLLECTION]
+            self.processing_results_collection = self.db[Config.PROCESSING_RESULTS_COLLECTION]
             
             # Test database access
             logger.info(f"Testing database access: {Config.DATABASE_NAME}")
             await self.alerts_collection.count_documents({})
             await self.alert_images_collection.count_documents({})
+            await self.processing_tasks_collection.count_documents({})
+            await self.processing_results_collection.count_documents({})
             logger.info("Database access successful")
             
             self.is_connected = True
@@ -352,6 +358,26 @@ class DatabaseManager:
             except Exception as e:
                 logger.info(f"Alert images index creation: {e}")
             
+            # Create indexes for processing tasks collection
+            try:
+                await self.processing_tasks_collection.create_index("task_id", unique=True)
+                await self.processing_tasks_collection.create_index("app_id")
+                await self.processing_tasks_collection.create_index("drone_id")
+                await self.processing_tasks_collection.create_index("status")
+                await self.processing_tasks_collection.create_index("created_at")
+                logger.info("Created processing tasks indexes")
+            except Exception as e:
+                logger.info(f"Processing tasks index creation: {e}")
+            
+            # Create indexes for processing results collection
+            try:
+                await self.processing_results_collection.create_index("task_id", unique=True)
+                await self.processing_results_collection.create_index("drone_id")
+                await self.processing_results_collection.create_index("timestamp")
+                logger.info("Created processing results indexes")
+            except Exception as e:
+                logger.info(f"Processing results index creation: {e}")
+            
             logger.info("Database schema fixed successfully")
             
         except Exception as e:
@@ -461,6 +487,164 @@ class DatabaseManager:
             
         except Exception as e:
             logger.error(f"Error deleting alert image {alert_image_id}: {e}")
+            raise
+
+    # Processing Tasks Methods
+    async def create_processing_task(self, task_data: Dict[str, Any]) -> str:
+        """Create a new processing task"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            # Generate task_id if not provided
+            if 'task_id' not in task_data or not task_data['task_id']:
+                import uuid
+                task_data['task_id'] = f"task_{uuid.uuid4().hex[:8]}"
+            
+            # Add timestamps
+            task_data['created_at'] = datetime.utcnow().isoformat()
+            task_data['updated_at'] = task_data['created_at']
+            
+            # Set default status
+            if 'status' not in task_data:
+                task_data['status'] = 'pending'
+            
+            result = await self.processing_tasks_collection.insert_one(task_data)
+            logger.info(f"Created processing task with ID: {task_data['task_id']}")
+            return task_data['task_id']
+            
+        except Exception as e:
+            logger.error(f"Error creating processing task: {e}")
+            raise
+
+    async def get_processing_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific processing task by ID"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            task = await self.processing_tasks_collection.find_one({'task_id': task_id})
+            
+            if task:
+                # Convert ObjectId to string
+                if '_id' in task:
+                    task['id'] = str(task['_id'])
+                    del task['_id']
+            
+            return task
+            
+        except Exception as e:
+            logger.error(f"Error getting processing task {task_id}: {e}")
+            raise
+
+    async def get_pending_tasks_for_drone(self, drone_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get pending tasks for a specific drone"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            cursor = self.processing_tasks_collection.find({
+                'drone_id': drone_id,
+                'status': 'pending'
+            }).sort('priority', -1).sort('created_at', 1).limit(limit)
+            
+            tasks = await cursor.to_list(length=limit)
+            
+            # Convert ObjectId to string
+            for task in tasks:
+                if '_id' in task:
+                    task['id'] = str(task['_id'])
+                    del task['_id']
+            
+            return tasks
+            
+        except Exception as e:
+            logger.error(f"Error getting pending tasks for drone {drone_id}: {e}")
+            raise
+
+    async def update_task_status(self, task_id: str, status: str, additional_data: Optional[Dict[str, Any]] = None) -> bool:
+        """Update task status"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            update_data = {
+                'status': status,
+                'updated_at': datetime.utcnow().isoformat()
+            }
+            
+            if additional_data:
+                update_data.update(additional_data)
+            
+            result = await self.processing_tasks_collection.update_one(
+                {'task_id': task_id},
+                {'$set': update_data}
+            )
+            
+            return result.modified_count > 0
+            
+        except Exception as e:
+            logger.error(f"Error updating task status {task_id}: {e}")
+            raise
+
+    # Processing Results Methods
+    async def create_processing_result(self, result_data: Dict[str, Any]) -> str:
+        """Create a new processing result"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            # Add timestamp if not present
+            if 'timestamp' not in result_data:
+                result_data['timestamp'] = datetime.utcnow().isoformat()
+            
+            result = await self.processing_results_collection.insert_one(result_data)
+            logger.info(f"Created processing result for task: {result_data.get('task_id', 'unknown')}")
+            return str(result.inserted_id)
+            
+        except Exception as e:
+            logger.error(f"Error creating processing result: {e}")
+            raise
+
+    async def get_processing_result(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Get processing result by task ID"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            result = await self.processing_results_collection.find_one({'task_id': task_id})
+            
+            if result:
+                # Convert ObjectId to string
+                if '_id' in result:
+                    result['id'] = str(result['_id'])
+                    del result['_id']
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error getting processing result for task {task_id}: {e}")
+            raise
+
+    async def get_results_by_drone(self, drone_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get processing results by drone ID"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            cursor = self.processing_results_collection.find({'drone_id': drone_id}).sort('timestamp', -1).limit(limit)
+            results = await cursor.to_list(length=limit)
+            
+            # Convert ObjectId to string
+            for result in results:
+                if '_id' in result:
+                    result['id'] = str(result['_id'])
+                    del result['_id']
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error getting results by drone {drone_id}: {e}")
             raise
 
 # Create global database manager instance

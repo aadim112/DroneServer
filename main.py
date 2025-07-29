@@ -13,7 +13,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depe
 from config import Config
 from database import db_manager
 from websocket_manager import websocket_manager
-from models import AlertCreate, AlertResponse, AlertImageUpdate, AlertImageCreate
+from models import AlertCreate, AlertResponse, AlertImageUpdate, AlertImageCreate, ProcessingTaskCreate
 
 # Configure logging
 logging.basicConfig(
@@ -416,6 +416,66 @@ async def delete_alert_image(alert_image_id: str):
         raise
     except Exception as e:
         logger.error(f"Error deleting alert image {alert_image_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# Processing Tasks and Results Endpoints
+@app.post("/api/processing-tasks")
+async def create_processing_task(task: ProcessingTaskCreate):
+    """Create a new processing task via REST API"""
+    try:
+        task_data = task.dict()
+        task_id = await db_manager.create_processing_task(task_data)
+        return {"task_id": task_id, "message": "Processing task created successfully"}
+    except Exception as e:
+        logger.error(f"Error creating processing task: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/processing-tasks/{task_id}")
+async def get_processing_task(task_id: str):
+    """Get a specific processing task by ID via REST API"""
+    try:
+        task = await db_manager.get_processing_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Processing task not found")
+        return task
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting processing task {task_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/processing-tasks/drone/{drone_id}/pending")
+async def get_pending_tasks_for_drone(drone_id: str, limit: int = 10):
+    """Get pending tasks for a specific drone via REST API"""
+    try:
+        tasks = await db_manager.get_pending_tasks_for_drone(drone_id, limit)
+        return {"tasks": tasks, "count": len(tasks), "drone_id": drone_id}
+    except Exception as e:
+        logger.error(f"Error getting pending tasks for drone {drone_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/processing-results/{task_id}")
+async def get_processing_result(task_id: str):
+    """Get processing result by task ID via REST API"""
+    try:
+        result = await db_manager.get_processing_result(task_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="Processing result not found")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting processing result for task {task_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/processing-results/drone/{drone_id}")
+async def get_results_by_drone(drone_id: str, limit: int = 50):
+    """Get processing results by drone ID via REST API"""
+    try:
+        results = await db_manager.get_results_by_drone(drone_id, limit)
+        return {"results": results, "count": len(results), "drone_id": drone_id}
+    except Exception as e:
+        logger.error(f"Error getting results by drone {drone_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 if __name__ == "__main__":

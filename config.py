@@ -9,6 +9,8 @@ class Config:
     DATABASE_NAME = os.getenv("DATABASE_NAME", "drone_alerts_db")
     ALERTS_COLLECTION = "alerts"
     ALERT_IMAGES_COLLECTION = "alertImage"
+    PROCESSING_TASKS_COLLECTION = "processingTasks"
+    PROCESSING_RESULTS_COLLECTION = "processingResults"
     
     # Server Configuration
     HOST = os.getenv("HOST", "0.0.0.0")
