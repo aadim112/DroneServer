@@ -8,7 +8,7 @@ async def test_complete_flow():
     """Test the complete flow from drone sending alert to application receiving it"""
     
     # First, connect as an application to listen for alerts
-    app_uri = "wss://web-production-190fc.up.railway.app/ws/application/test_app_001"
+    app_uri = "wss://web-production-190fc.up.railway.app/ws/application/app_001"
     drone_uri = "wss://web-production-190fc.up.railway.app/ws/drone/drone_001"
     
     print("Starting complete flow test...")
@@ -58,14 +58,31 @@ async def test_complete_flow():
             try:
                 app_alert_msg = await asyncio.wait_for(app_websocket.recv(), timeout=10.0)
                 app_alert_data = json.loads(app_alert_msg)
-                print(f"📨 Application received alert: {app_alert_data.get('type')}")
-                print(f"📋 Alert data: {json.dumps(app_alert_data, indent=2)}")
+                print(f"📨 Application received message: {app_alert_data.get('type')}")
+                print(f"📋 Message data: {json.dumps(app_alert_data, indent=2)}")
                 
                 if app_alert_data.get('type') == 'new_alert':
-                    print("🎉 SUCCESS: Application received the alert!")
+                    print("🎉 SUCCESS: Application received the new alert!")
                     alert_data = app_alert_data.get('alert', {})
                     print(f"Alert message: {alert_data.get('alert')}")
                     print(f"Alert ID: {app_alert_data.get('alert_id')}")
+                    print(f"Alert type: {alert_data.get('alert_type')}")
+                    print(f"Score: {alert_data.get('score')}")
+                elif app_alert_data.get('type') == 'initial_alerts':
+                    print("ℹ️ Application received initial alerts (this is normal)")
+                    alerts = app_alert_data.get('alerts', [])
+                    print(f"Number of initial alerts: {len(alerts)}")
+                    # Continue waiting for the new alert
+                    app_alert_msg = await asyncio.wait_for(app_websocket.recv(), timeout=10.0)
+                    app_alert_data = json.loads(app_alert_msg)
+                    print(f"📨 Application received next message: {app_alert_data.get('type')}")
+                    if app_alert_data.get('type') == 'new_alert':
+                        print("🎉 SUCCESS: Application received the new alert!")
+                        alert_data = app_alert_data.get('alert', {})
+                        print(f"Alert message: {alert_data.get('alert')}")
+                        print(f"Alert ID: {app_alert_data.get('alert_id')}")
+                    else:
+                        print(f"❌ Unexpected second message type: {app_alert_data.get('type')}")
                 else:
                     print(f"❌ Unexpected message type: {app_alert_data.get('type')}")
                     

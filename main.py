@@ -13,7 +13,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depe
 from config import Config
 from database import db_manager
 from websocket_manager import websocket_manager
-from models import AlertCreate, AlertResponse, AlertImageUpdate
+from models import AlertCreate, AlertResponse, AlertImageUpdate, AlertImageCreate
 
 # Configure logging
 logging.basicConfig(
@@ -357,6 +357,66 @@ async def debug_environment():
         "host": os.getenv('HOST', 'NOT_SET'),
         "port": os.getenv('PORT', 'NOT_SET')
     }
+
+# Alert Image Endpoints
+@app.post("/api/alert-images")
+async def create_alert_image(alert_image: AlertImageCreate):
+    """Create a new alert image via REST API"""
+    try:
+        alert_image_data = alert_image.dict()
+        alert_image_id = await db_manager.create_alert_image(alert_image_data)
+        return {"alert_image_id": alert_image_id, "message": "Alert image created successfully"}
+    except Exception as e:
+        logger.error(f"Error creating alert image: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/alert-images")
+async def get_alert_images(limit: int = 100):
+    """Get all alert images via REST API"""
+    try:
+        alert_images = await db_manager.get_all_alert_images(limit)
+        return {"alert_images": alert_images, "count": len(alert_images)}
+    except Exception as e:
+        logger.error(f"Error getting alert images: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/alert-images/{alert_image_id}")
+async def get_alert_image(alert_image_id: str):
+    """Get a specific alert image by ID via REST API"""
+    try:
+        alert_image = await db_manager.get_alert_image(alert_image_id)
+        if not alert_image:
+            raise HTTPException(status_code=404, detail="Alert image not found")
+        return alert_image
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting alert image {alert_image_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/alert-images/drone/{drone_id}")
+async def get_alert_images_by_drone(drone_id: str, limit: int = 50):
+    """Get alert images by drone ID via REST API"""
+    try:
+        alert_images = await db_manager.get_alert_images_by_drone(drone_id, limit)
+        return {"alert_images": alert_images, "count": len(alert_images), "drone_id": drone_id}
+    except Exception as e:
+        logger.error(f"Error getting alert images by drone {drone_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.delete("/api/alert-images/{alert_image_id}")
+async def delete_alert_image(alert_image_id: str):
+    """Delete an alert image by ID via REST API"""
+    try:
+        success = await db_manager.delete_alert_image(alert_image_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Alert image not found")
+        return {"message": "Alert image deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting alert image {alert_image_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 if __name__ == "__main__":
     import uvicorn

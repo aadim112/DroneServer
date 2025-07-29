@@ -37,6 +37,24 @@ class AlertImageUpdate(BaseModel):
     image: str
     image_received: int = 1
 
+class AlertImage(BaseModel):
+    found: int = Field(..., description="Detection status (1=found, 0=not found)")
+    name: str = Field(..., description="Name or identifier of the detected object")
+    drone_id: str = Field(default="No Drone", description="ID of the drone that captured the image")
+    actual_image: str = Field(..., description="Base64 encoded actual image blob")
+    matched_frame: str = Field(..., description="Base64 encoded matched frame blob")
+    location: List[float] = Field(default=[0, 0, 0], description="Location coordinates [x, y, z]")
+    timestamp: str = Field(..., description="Capture timestamp in ISO format")
+
+class AlertImageCreate(BaseModel):
+    found: int
+    name: str
+    drone_id: str = "No Drone"
+    actual_image: str
+    matched_frame: str
+    location: List[float] = [0, 0, 0]
+    timestamp: str
+
 class WebSocketMessage(BaseModel):
     type: str
     data: Dict[str, Any]

@@ -8,6 +8,7 @@ class Config:
     MONGODB_URI = os.getenv("MONGODB_URI", "mongodb+srv://aamp898989:dronesurvillance@cluster0.cftmhkh.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
     DATABASE_NAME = os.getenv("DATABASE_NAME", "drone_alerts_db")
     ALERTS_COLLECTION = "alerts"
+    ALERT_IMAGES_COLLECTION = "alertImage"
     
     # Server Configuration
     HOST = os.getenv("HOST", "0.0.0.0")

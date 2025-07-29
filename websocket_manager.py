@@ -253,6 +253,28 @@ class WebSocketManager:
             
         except Exception as e:
             logger.error(f"Error handling image from drone {drone_id}: {e}")
+
+    async def handle_alert_image_from_drone(self, drone_id: str, alert_image_data: Dict[str, Any]):
+        """Handle alert image data from drone"""
+        try:
+            # Create alert image in database
+            alert_image_id = await db_manager.create_alert_image(alert_image_data)
+            
+            # Broadcast to applications
+            broadcast_message = {
+                "type": "alert_image_received",
+                "alert_image_id": alert_image_id,
+                "alert_image": serialize_datetime(alert_image_data),
+                "drone_id": drone_id,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            await self.broadcast_to_applications(broadcast_message)
+            
+            logger.info(f"Alert image {alert_image_id} from drone {drone_id} processed and broadcasted")
+            
+        except Exception as e:
+            logger.error(f"Error handling alert image from drone {drone_id}: {e}")
+            logger.error(f"Alert image data: {alert_image_data}")
     
     async def handle_websocket_message(self, client_id: str, message_data: Dict[str, Any]):
         """Handle incoming WebSocket message"""
@@ -283,6 +305,12 @@ class WebSocketManager:
                     await self.handle_image_from_drone(client_id, message_data.get('data', {}))
                 else:
                     logger.warning(f"Applications cannot send images")
+            
+            elif message_type == 'alert_image':
+                if client_type == 'drone':
+                    await self.handle_alert_image_from_drone(client_id, message_data.get('data', {}))
+                else:
+                    logger.warning(f"Applications cannot send alert images")
             
             elif message_type == 'ping':
                 # Respond to ping

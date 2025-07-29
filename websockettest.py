@@ -9,7 +9,7 @@ async def send_alert():
         alert = {
             "type": "alert",
             "data": {
-                "alert": "abc!",
+                "alert": "heyyyyy!",
                 "alert_location": [0.0, 0.0, 0.0],
                 "timestamp": datetime.now().isoformat(),
                 "alert_type": "Crowd",

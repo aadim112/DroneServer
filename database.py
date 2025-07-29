@@ -16,6 +16,7 @@ class DatabaseManager:
         self.client: Optional[AsyncIOMotorClient] = None
         self.db = None
         self.alerts_collection = None
+        self.alert_images_collection = None
         self.is_connected = False
         self.change_stream = None
         
@@ -53,13 +54,15 @@ class DatabaseManager:
             await self.client.admin.command('ping')
             logger.info("MongoDB ping successful")
             
-            # Set up database and collection
+            # Set up database and collections
             self.db = self.client[Config.DATABASE_NAME]
             self.alerts_collection = self.db[Config.ALERTS_COLLECTION]
+            self.alert_images_collection = self.db[Config.ALERT_IMAGES_COLLECTION]
             
             # Test database access
             logger.info(f"Testing database access: {Config.DATABASE_NAME}")
             await self.alerts_collection.count_documents({})
+            await self.alert_images_collection.count_documents({})
             logger.info("Database access successful")
             
             self.is_connected = True
@@ -339,10 +342,125 @@ class DatabaseManager:
             except Exception as e:
                 logger.info(f"Additional index creation: {e}")
             
+            # Create indexes for alert images collection
+            try:
+                await self.alert_images_collection.create_index("drone_id")
+                await self.alert_images_collection.create_index("timestamp")
+                await self.alert_images_collection.create_index("found")
+                await self.alert_images_collection.create_index("name")
+                logger.info("Created alert images indexes")
+            except Exception as e:
+                logger.info(f"Alert images index creation: {e}")
+            
             logger.info("Database schema fixed successfully")
             
         except Exception as e:
             logger.error(f"Error fixing database schema: {e}")
+            raise
+
+    async def create_alert_image(self, alert_image_data: Dict[str, Any]) -> str:
+        """Create a new alert image record"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            # Add created_at field
+            alert_image_data['created_at'] = datetime.utcnow()
+            
+            result = await self.alert_images_collection.insert_one(alert_image_data)
+            logger.info(f"Created alert image with ID: {result.inserted_id}")
+            return str(result.inserted_id)
+            
+        except Exception as e:
+            logger.error(f"Error creating alert image: {e}")
+            raise
+
+    async def get_all_alert_images(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get all alert images"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            cursor = self.alert_images_collection.find().sort('created_at', -1).limit(limit)
+            alert_images = await cursor.to_list(length=limit)
+            
+            # Convert ObjectId to string and datetime to ISO format for JSON serialization
+            for alert_image in alert_images:
+                if '_id' in alert_image:
+                    alert_image['id'] = str(alert_image['_id'])
+                    del alert_image['_id']
+                
+                # Convert datetime fields to ISO format strings
+                if 'created_at' in alert_image and isinstance(alert_image['created_at'], datetime):
+                    alert_image['created_at'] = alert_image['created_at'].isoformat()
+            
+            return alert_images
+            
+        except Exception as e:
+            logger.error(f"Error getting alert images: {e}")
+            raise
+
+    async def get_alert_image(self, alert_image_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific alert image by ID"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            from bson import ObjectId
+            alert_image = await self.alert_images_collection.find_one({'_id': ObjectId(alert_image_id)})
+            
+            if alert_image:
+                alert_image['id'] = str(alert_image['_id'])
+                del alert_image['_id']
+                
+                # Convert datetime fields to ISO format strings
+                if 'created_at' in alert_image and isinstance(alert_image['created_at'], datetime):
+                    alert_image['created_at'] = alert_image['created_at'].isoformat()
+            
+            return alert_image
+            
+        except Exception as e:
+            logger.error(f"Error getting alert image {alert_image_id}: {e}")
+            raise
+
+    async def get_alert_images_by_drone(self, drone_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get alert images by drone ID"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            cursor = self.alert_images_collection.find({'drone_id': drone_id}).sort('created_at', -1).limit(limit)
+            alert_images = await cursor.to_list(length=limit)
+            
+            # Convert ObjectId to string and datetime to ISO format for JSON serialization
+            for alert_image in alert_images:
+                if '_id' in alert_image:
+                    alert_image['id'] = str(alert_image['_id'])
+                    del alert_image['_id']
+                
+                # Convert datetime fields to ISO format strings
+                if 'created_at' in alert_image and isinstance(alert_image['created_at'], datetime):
+                    alert_image['created_at'] = alert_image['created_at'].isoformat()
+            
+            return alert_images
+            
+        except Exception as e:
+            logger.error(f"Error getting alert images by drone {drone_id}: {e}")
+            raise
+
+    async def delete_alert_image(self, alert_image_id: str) -> bool:
+        """Delete an alert image by ID"""
+        try:
+            if not self.is_connected:
+                raise Exception("Database not connected")
+            
+            from bson import ObjectId
+            result = await self.alert_images_collection.delete_one({'_id': ObjectId(alert_image_id)})
+            
+            return result.deleted_count > 0
+            
+        except Exception as e:
+            logger.error(f"Error deleting alert image {alert_image_id}: {e}")
             raise
 
 # Create global database manager instance
