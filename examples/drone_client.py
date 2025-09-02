@@ -20,8 +20,8 @@ class DroneClient:
         if server_url is None:
             # Try common Railway.app patterns
             possible_urls = [
-                "wss://web-production-190fc.up.railway.app",
-                "wss://web-production-190fc.up.railway.app",  # Replace with your actual app name
+                "wss://droneserver-5pfg.onrender.com",
+                "wss://droneserver-5pfg.onrender.com",  # Replace with your actual app name
                 "wss://localhost:8000",  # For local development
                 "ws://localhost:8000"    # For local development without SSL
             ]
